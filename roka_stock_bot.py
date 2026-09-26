@@ -66,22 +66,23 @@ def find_variant(product, target_variant_id, size):
     return None
 
 
-def load_previous_state():
+def load_previous_states():
     if not STATE_FILE.exists():
-        return None
+        return {}
     try:
-        return json.loads(STATE_FILE.read_text()).get("available")
+        data = json.loads(STATE_FILE.read_text())
     except (OSError, json.JSONDecodeError):
-        return None
+        return {}
+    if "available" in data:
+        return {str(PRODUCTS[0]["variant_id"]): data.get("available")}
+    return data if isinstance(data, dict) else {}
 
 
-def save_state(available):
-    STATE_FILE.write_text(
-        json.dumps({"available": bool(available)}, indent=2) + "\n"
-    )
+def save_states(states):
+    STATE_FILE.write_text(json.dumps(states, indent=2) + "\n")
 
 
-def send_discord_alert(variant):
+def send_discord_alert(product_config, variant):
     webhook = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook:
         raise RuntimeError(
@@ -96,8 +97,8 @@ def send_discord_alert(variant):
             pass
 
     message = (
-        f"🚨 ROKA size {SIZE_TO_WATCH} is AVAILABLE!\n"
-        f"{PRODUCT_URL}\n"
+        f"🚨 ROKA {product_config['name']} size {product_config['size']} is AVAILABLE!\n"
+        f"{product_config['url']}\n"
         f"Price: {price if price is not None else 'see site'}"
     )
 
