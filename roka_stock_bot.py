@@ -19,6 +19,12 @@ PRODUCTS = [
         "size": "L",
     },
     {
+        "name": "Maverick Pro.3 Wetsuit Open Box",
+        "url": "https://rokamultisport.com/products/mens-maverick-pro-3-wetsuit-open-box",
+        "variant_id": 50594096251153,
+        "size": "L",
+    },
+    {
         "name": "Maverick Comp.3 Wetsuit Open Box",
         "url": "https://rokamultisport.com/products/mens-maverick-comp-3-wetsuit-open-box",
         "variant_id": 50593984250129,
