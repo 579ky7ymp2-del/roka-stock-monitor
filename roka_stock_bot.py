@@ -86,7 +86,7 @@ def send_discord_alert(variant):
     price = variant.get("price")
     if price is not None:
         try:
-            price = f"\${int(price) / 100:.2f}"
+            price = "$" + f"{int(price) / 100:.2f}"
         except (ValueError, TypeError):
             pass
 
