@@ -109,7 +109,8 @@ def find_variant(product, target_variant_id, size, color=None):
         for variant in variants:
             try:
                 if int(variant.get("id")) == int(target_variant_id):
-                    return variant
+                    if color is None or _matches_color(variant, color):
+                        return variant
             except (TypeError, ValueError):
                 pass
 
