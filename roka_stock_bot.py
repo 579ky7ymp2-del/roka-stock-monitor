@@ -5,39 +5,45 @@ from pathlib import Path
 
 import requests
 
-PRODUCT_URL = "https://rokamultisport.com/products/mens-maverick-x-3-wetsuit-open-box"
-PRODUCT_JSON_URL = PRODUCT_URL + ".js"
-
-# Exact variant from the product URL the user provided.
-TARGET_VARIANT_ID = 50594180366609
-SIZE_TO_WATCH = "L"
+PRODUCTS = [
+    {
+        "name": "Maverick X-3 Wetsuit Open Box",
+        "url": "https://rokamultisport.com/products/mens-maverick-x-3-wetsuit-open-box",
+        "variant_id": 50594180366609,
+        "size": "L",
+    },
+    {
+        "name": "Maverick Pro-3 Wetsuit",
+        "url": "https://rokamultisport.com/collections/outlet-wetsuits/products/mens-maverick-pro-3-wetsuit",
+        "variant_id": 49751913890065,
+        "size": "L",
+    },
+]
 
 STATE_FILE = Path("roka_state.json")
 TIMEOUT = 20
 
 
-def fetch_product():
+def fetch_product(url):
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; ROKA-Stock-Monitor/1.0)"
     }
-    response = requests.get(PRODUCT_JSON_URL, headers=headers, timeout=TIMEOUT)
+    response = requests.get(url + ".js", headers=headers, timeout=TIMEOUT)
     response.raise_for_status()
     return response.json()
 
 
-def find_variant(product):
+def find_variant(product, target_variant_id, size):
     variants = product.get("variants", [])
 
-    # Prefer the exact variant ID from the user's ROKA product URL.
     for variant in variants:
         try:
-            if int(variant.get("id")) == TARGET_VARIANT_ID:
+            if int(variant.get("id")) == target_variant_id:
                 return variant
         except (TypeError, ValueError):
             pass
 
-    # Fallback in case ROKA changes the variant ID.
-    size_aliases = {"l", "large"}
+    size_aliases = {size.strip().lower(), "large"}
     for variant in variants:
         values = [
             variant.get("title", ""),
@@ -50,7 +56,6 @@ def find_variant(product):
             if normalized in size_aliases:
                 return variant
 
-            # Also handle labels such as "Black / L" or "Size: L".
             tokens = {
                 token.strip().lower()
                 for token in normalized.replace("/", "|").replace(",", "|").split("|")
@@ -104,37 +109,54 @@ def send_discord_alert(variant):
     response.raise_for_status()
 
 
-def main():
-    product = fetch_product()
-    variant = find_variant(product)
+def check_product(product_config, previous_states):
+    product = fetch_product(product_config["url"])
+    variant = find_variant(
+        product,
+        product_config["variant_id"],
+        product_config["size"],
+    )
 
     if variant is None:
         raise RuntimeError(
-            f"Could not find the ROKA size {SIZE_TO_WATCH!r} variant "
-            f"(target variant ID {TARGET_VARIANT_ID})."
+            f"Could not find {product_config['name']} size "
+            f"{product_config['size']!r} variant "
+            f"(target variant ID {product_config['variant_id']})."
         )
 
     available = bool(variant.get("available", False))
-    previous = load_previous_state()
+    state_key = str(product_config["variant_id"])
+    previous = previous_states.get(state_key)
 
     print(
-        f"ROKA {SIZE_TO_WATCH}: "
+        f"ROKA {product_config['name']} size {product_config['size']}: "
         f"{'AVAILABLE' if available else 'sold out'} "
         f"(variant {variant.get('id')}, previous: {previous})"
     )
 
     if available and previous is False:
-        send_discord_alert(variant)
+        send_discord_alert(product_config, variant)
         print("Discord alert sent.")
     elif available and previous is None:
         print("First run and item is available; state initialized without alert.")
 
-    save_state(available)
+    previous_states[state_key] = available
+
+
+def main():
+    previous_states = load_previous_states()
+
+    for product_config in PRODUCTS:
+        try:
+            check_product(product_config, previous_states)
+        except Exception as exc:
+            print(
+                f"Monitor failed for {product_config['name']}: {exc}",
+                file=sys.stderr,
+            )
+
+    save_states(previous_states)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as exc:
-        print(f"Monitor failed: {exc}", file=sys.stderr)
-        raise
+    main()
