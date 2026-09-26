@@ -153,13 +153,22 @@ def save_states(states):
     STATE_FILE.write_text(json.dumps(states, indent=2) + "\n")
 
 
-def send_discord_alert(product_config, variant):
+def send_discord_message(message):
     webhook = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook:
         raise RuntimeError(
-            "DISCORD_WEBHOOK_URL is not set; cannot send the stock alert."
+            "DISCORD_WEBHOOK_URL is not set; cannot send the Discord message."
         )
 
+    response = requests.post(
+        webhook,
+        json={"content": message},
+        timeout=TIMEOUT,
+    )
+    response.raise_for_status()
+
+
+def send_discord_alert(product_config, variant):
     price = variant.get("price")
     if price is not None:
         try:
@@ -180,12 +189,23 @@ def send_discord_alert(product_config, variant):
         f"Price: {price if price is not None else 'see site'}"
     )
 
-    response = requests.post(
-        webhook,
-        json={"content": message},
-        timeout=TIMEOUT,
+    send_discord_message(message)
+
+
+def send_failure_alert(product_config, error):
+    color_text = (
+        f" in {product_config['color']} color"
+        if product_config.get("color")
+        else ""
     )
-    response.raise_for_status()
+    message = (
+        f"⚠️ ROKA STOCK MONITOR FAILED\n"
+        f"Product: {product_config['name']} size {product_config['size']}{color_text}\n"
+        f"Error: {error}\n"
+        f"URL: {product_config['url']}\n"
+        f"The bot may not be checking this item correctly."
+    )
+    send_discord_message(message)
 
 
 def check_product(product_config, previous_states):
@@ -236,6 +256,7 @@ def check_product(product_config, previous_states):
 
 def main():
     previous_states = load_previous_states()
+    failures = []
 
     for product_config in PRODUCTS:
         try:
@@ -245,8 +266,22 @@ def main():
                 f"Monitor failed for {product_config['name']}: {exc}",
                 file=sys.stderr,
             )
+            failures.append((product_config, exc))
+            try:
+                send_failure_alert(product_config, exc)
+                print("Failure alert sent.")
+            except Exception as alert_exc:
+                print(
+                    f"Could not send failure alert: {alert_exc}",
+                    file=sys.stderr,
+                )
 
     save_states(previous_states)
+
+    if failures:
+        raise RuntimeError(
+            f"{len(failures)} product monitor(s) failed."
+        )
 
 
 if __name__ == "__main__":
