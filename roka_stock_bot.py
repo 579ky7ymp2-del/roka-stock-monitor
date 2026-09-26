@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -41,6 +42,7 @@ PRODUCTS = [
 ]
 
 STATE_FILE = Path("roka_state.json")
+HISTORY_FILE = Path("roka_history.jsonl")
 TIMEOUT = 20
 
 
@@ -128,6 +130,17 @@ def find_variant(product, target_variant_id, size, color=None):
 
 
 def state_key(product_config):
+    # Color-specific trackers must have separate keys even when Shopify gives
+    # them the same variant ID in the supplied product data.
+    if product_config.get("color"):
+        return "|".join(
+            [
+                product_config["url"],
+                _normalized(product_config.get("color")),
+                _normalized(product_config.get("size")),
+            ]
+        )
+
     if product_config.get("variant_id") is not None:
         return str(product_config["variant_id"])
 
@@ -157,6 +170,22 @@ def load_previous_states():
 
 def save_states(states):
     STATE_FILE.write_text(json.dumps(states, indent=2) + "\n")
+
+
+def append_history(product_config, variant, available, previous):
+    record = {
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "name": product_config["name"],
+        "url": product_config["url"],
+        "size": product_config["size"],
+        "color": product_config.get("color"),
+        "variant_id": variant.get("id"),
+        "available": available,
+        "previous_available": previous,
+        "price": variant.get("price"),
+    }
+    with HISTORY_FILE.open("a", encoding="utf-8") as history:
+        history.write(json.dumps(record, separators=(",", ":")) + "\n")
 
 
 def send_discord_message(message):
@@ -254,8 +283,16 @@ def check_product(product_config, previous_states):
     if available and previous is False:
         send_discord_alert(product_config, variant)
         print("Discord alert sent.")
-    elif available and previous is None:
-        print("First run and item is available; state initialized without alert.")
+
+    # Record the initial observation and every subsequent availability change.
+    # This gives us a compact historical timeline without writing a row every
+    # five minutes (which would make the Git repository unnecessarily large).
+    if previous is None or previous != available:
+        append_history(product_config, variant, available, previous)
+        if previous is None:
+            print("Initial stock state recorded in history.")
+        else:
+            print("Stock state change recorded in history.")
 
     previous_states[key] = available
 
