@@ -18,6 +18,20 @@ PRODUCTS = [
         "variant_id": 49751913890065,
         "size": "L",
     },
+    {
+        "name": "Maverick Comp.3 Wetsuit",
+        "url": "https://rokamultisport.com/products/mens-maverick-comp-3-wetsuit",
+        "variant_id": None,
+        "size": "L",
+        "color": "Cyclone",
+    },
+    {
+        "name": "Maverick Comp.3 Wetsuit",
+        "url": "https://rokamultisport.com/products/mens-maverick-comp-3-wetsuit",
+        "variant_id": None,
+        "size": "L",
+        "color": "Black/Yellow",
+    },
 ]
 
 STATE_FILE = Path("roka_state.json")
@@ -33,48 +47,104 @@ def fetch_product(url):
     return response.json()
 
 
-def find_variant(product, target_variant_id, size):
+def _normalized(value):
+    return str(value or "").strip().lower()
+
+
+def _matches_size(variant, size):
+    size_aliases = {_normalized(size), "large"}
+    values = [
+        variant.get("title", ""),
+        variant.get("option1", ""),
+        variant.get("option2", ""),
+        variant.get("option3", ""),
+    ]
+
+    for value in values:
+        normalized = _normalized(value)
+        if normalized in size_aliases:
+            return True
+
+        tokens = {
+            token.strip().lower()
+            for token in normalized.replace("/", "|").replace(",", "|").split("|")
+        }
+        if size_aliases & tokens:
+            return True
+
+    return False
+
+
+def _matches_color(variant, color):
+    if not color:
+        return True
+
+    target = _normalized(color)
+    values = [
+        variant.get("title", ""),
+        variant.get("option1", ""),
+        variant.get("option2", ""),
+        variant.get("option3", ""),
+    ]
+
+    for value in values:
+        normalized = _normalized(value)
+        if normalized == target:
+            return True
+
+        # Handles titles such as "Black/Yellow / L".
+        if target in {
+            token.strip().lower()
+            for token in normalized.split(" / ")
+        }:
+            return True
+
+    return False
+
+
+def find_variant(product, target_variant_id, size, color=None):
     variants = product.get("variants", [])
 
-    for variant in variants:
-        try:
-            if int(variant.get("id")) == target_variant_id:
-                return variant
-        except (TypeError, ValueError):
-            pass
+    if target_variant_id is not None:
+        for variant in variants:
+            try:
+                if int(variant.get("id")) == int(target_variant_id):
+                    return variant
+            except (TypeError, ValueError):
+                pass
 
-    size_aliases = {size.strip().lower(), "large"}
     for variant in variants:
-        values = [
-            variant.get("title", ""),
-            variant.get("option1", ""),
-            variant.get("option2", ""),
-            variant.get("option3", ""),
-        ]
-        for value in values:
-            normalized = str(value).strip().lower()
-            if normalized in size_aliases:
-                return variant
-
-            tokens = {
-                token.strip().lower()
-                for token in normalized.replace("/", "|").replace(",", "|").split("|")
-            }
-            if size_aliases & tokens:
-                return variant
+        if _matches_size(variant, size) and _matches_color(variant, color):
+            return variant
 
     return None
+
+
+def state_key(product_config):
+    if product_config.get("variant_id") is not None:
+        return str(product_config["variant_id"])
+
+    return "|".join(
+        [
+            product_config["url"],
+            _normalized(product_config.get("color")),
+            _normalized(product_config["size"]),
+        ]
+    )
 
 
 def load_previous_states():
     if not STATE_FILE.exists():
         return {}
+
     try:
         data = json.loads(STATE_FILE.read_text())
     except (OSError, json.JSONDecodeError):
         return {}
+
     if "available" in data:
         return {str(PRODUCTS[0]["variant_id"]): data.get("available")}
+
     return data if isinstance(data, dict) else {}
 
 
@@ -96,8 +166,15 @@ def send_discord_alert(product_config, variant):
         except (ValueError, TypeError):
             pass
 
+    color_text = (
+        f" in {product_config['color']} color"
+        if product_config.get("color")
+        else ""
+    )
+
     message = (
-        f"🚨 ROKA {product_config['name']} size {product_config['size']} is AVAILABLE!\n"
+        f"🚨 ROKA {product_config['name']} size {product_config['size']}"
+        f"{color_text} is AVAILABLE!\n"
         f"{product_config['url']}\n"
         f"Price: {price if price is not None else 'see site'}"
     )
@@ -114,23 +191,35 @@ def check_product(product_config, previous_states):
     product = fetch_product(product_config["url"])
     variant = find_variant(
         product,
-        product_config["variant_id"],
+        product_config.get("variant_id"),
         product_config["size"],
+        product_config.get("color"),
     )
 
     if variant is None:
+        color_text = (
+            f" in {product_config['color']} color"
+            if product_config.get("color")
+            else ""
+        )
         raise RuntimeError(
             f"Could not find {product_config['name']} size "
-            f"{product_config['size']!r} variant "
-            f"(target variant ID {product_config['variant_id']})."
+            f"{product_config['size']!r}{color_text} variant."
         )
 
     available = bool(variant.get("available", False))
-    state_key = str(product_config["variant_id"])
-    previous = previous_states.get(state_key)
+    key = state_key(product_config)
+    previous = previous_states.get(key)
+
+    color_text = (
+        f" {product_config['color']}"
+        if product_config.get("color")
+        else ""
+    )
 
     print(
-        f"ROKA {product_config['name']} size {product_config['size']}: "
+        f"ROKA {product_config['name']}{color_text} size "
+        f"{product_config['size']}: "
         f"{'AVAILABLE' if available else 'sold out'} "
         f"(variant {variant.get('id')}, previous: {previous})"
     )
@@ -141,7 +230,7 @@ def check_product(product_config, previous_states):
     elif available and previous is None:
         print("First run and item is available; state initialized without alert.")
 
-    previous_states[state_key] = available
+    previous_states[key] = available
 
 
 def main():
