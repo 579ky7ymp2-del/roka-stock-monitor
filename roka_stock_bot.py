@@ -32,6 +32,12 @@ PRODUCTS = [
         "size": "L",
         "color": "Black/Yellow",
     },
+    {
+        "name": "Maverick Comp.3 Wetsuit Open Box",
+        "url": "https://rokamultisport.com/products/mens-maverick-comp-3-wetsuit-open-box",
+        "variant_id": 50593984250129,
+        "size": "L",
+    },
 ]
 
 STATE_FILE = Path("roka_state.json")
