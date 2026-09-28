@@ -43,3 +43,5 @@ jobs:
           git add roka_state.json roka_history.jsonl
           git commit -m "Update ROKA stock history"
           git push
+
+# Discord test trigger
