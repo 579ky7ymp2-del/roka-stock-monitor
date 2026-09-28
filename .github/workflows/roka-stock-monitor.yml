@@ -1,6 +1,10 @@
 name: ROKA Stock Monitor
 
 on:
+  push:
+    paths:
+      - ".github/workflows/roka-stock-monitor.yml"
+      - "roka_stock_bot.py"
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
