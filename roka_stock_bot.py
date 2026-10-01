@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -51,15 +52,50 @@ PRODUCTS = [
 STATE_FILE = Path("roka_state.json")
 HISTORY_FILE = Path("roka_history.jsonl")
 TIMEOUT = 20
+MAX_REQUEST_ATTEMPTS = 3
+RETRY_DELAYS = (2, 5)
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 def fetch_product(url):
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; ROKA-Stock-Monitor/1.0)"
     }
-    response = requests.get(url + ".js", headers=headers, timeout=TIMEOUT)
-    response.raise_for_status()
-    return response.json()
+
+    for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
+        try:
+            response = requests.get(
+                url + ".js",
+                headers=headers,
+                timeout=TIMEOUT,
+            )
+
+            if response.status_code in RETRYABLE_STATUS_CODES:
+                if attempt < MAX_REQUEST_ATTEMPTS:
+                    delay = RETRY_DELAYS[attempt - 1]
+                    print(
+                        f"ROKA returned HTTP {response.status_code}; "
+                        f"retrying in {delay}s "
+                        f"(attempt {attempt}/{MAX_REQUEST_ATTEMPTS})."
+                    )
+                    time.sleep(delay)
+                    continue
+
+            response.raise_for_status()
+            return response.json()
+
+        except requests.RequestException as exc:
+            if attempt >= MAX_REQUEST_ATTEMPTS:
+                raise
+
+            delay = RETRY_DELAYS[attempt - 1]
+            print(
+                f"ROKA request failed: {exc}; retrying in {delay}s "
+                f"(attempt {attempt}/{MAX_REQUEST_ATTEMPTS})."
+            )
+            time.sleep(delay)
+
+    raise RuntimeError("ROKA product request failed after all retry attempts.")
 
 
 def _normalized(value):
