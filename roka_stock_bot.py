@@ -51,6 +51,12 @@ PRODUCTS = [
 
 STATE_FILE = Path("roka_state.json")
 HISTORY_FILE = Path("roka_history.jsonl")
+PRICE_STATE_FILE = Path("roka_price_state.json")
+PRICE_WATCH = {
+    "name": "Maverick Comp.3 Wetsuit",
+    "url": "https://rokamultisport.com/collections/bestsellers/products/mens-maverick-comp-3-wetsuit",
+    "variant_id": 51749635784977,
+}
 TIMEOUT = 20
 MAX_REQUEST_ATTEMPTS = 3
 RETRY_DELAYS = (2, 5)
@@ -340,6 +346,62 @@ def check_product(product_config, previous_states):
     previous_states[key] = available
 
 
+def check_price_drop():
+    """Track this exact Shopify variant and alert when its price decreases."""
+    product = fetch_product(PRICE_WATCH["url"])
+    variant = next(
+        (
+            item for item in product.get("variants", [])
+            if str(item.get("id")) == str(PRICE_WATCH["variant_id"])
+        ),
+        None,
+    )
+    if variant is None:
+        raise RuntimeError(
+            f"Could not find price-watch variant {PRICE_WATCH['variant_id']}."
+        )
+
+    try:
+        current_price = int(variant["price"])
+    except (KeyError, TypeError, ValueError):
+        raise RuntimeError("Price-watch variant returned an invalid price.")
+
+    try:
+        price_state = json.loads(PRICE_STATE_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        price_state = {}
+
+    previous_price = price_state.get(str(PRICE_WATCH["variant_id"]))
+    if previous_price is not None:
+        try:
+            previous_price = int(previous_price)
+        except (TypeError, ValueError):
+            previous_price = None
+
+    print(
+        f"ROKA price watch {PRICE_WATCH['name']}: "
+        f"${current_price / 100:.2f} "
+        f"(previous: "
+        f"${previous_price / 100:.2f}" if previous_price is not None
+        else f"ROKA price watch {PRICE_WATCH['name']}: "
+             f"${current_price / 100:.2f} (baseline)"
+    )
+
+    if previous_price is not None and current_price < previous_price:
+        message = (
+            f"💸 ROKA PRICE DROP: {PRICE_WATCH['name']}!\\n"
+            f"Price decreased from ${previous_price / 100:.2f} "
+            f"to ${current_price / 100:.2f}.\\n"
+            f"{PRICE_WATCH['url']}?variant={PRICE_WATCH['variant_id']}"
+        )
+        send_discord_message(message)
+        print("Price-drop Discord alert sent.")
+
+    PRICE_STATE_FILE.write_text(
+        json.dumps({str(PRICE_WATCH["variant_id"]): current_price}, indent=2) + "\\n"
+    )
+
+
 def main():
     previous_states = load_previous_states()
     failures = []
@@ -361,6 +423,19 @@ def main():
                     f"Could not send failure alert: {alert_exc}",
                     file=sys.stderr,
                 )
+
+    try:
+        check_price_drop()
+    except Exception as exc:
+        print(f"Price monitor failed: {exc}", file=sys.stderr)
+        try:
+            send_discord_message(
+                f"⚠️ ROKA PRICE MONITOR FAILED\\nError: {exc}\\n"
+                f"URL: {PRICE_WATCH['url']}"
+            )
+        except Exception as alert_exc:
+            print(f"Could not send price failure alert: {alert_exc}", file=sys.stderr)
+        failures.append((PRICE_WATCH, exc))
 
     save_states(previous_states)
 
