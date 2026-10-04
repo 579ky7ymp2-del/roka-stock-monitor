@@ -389,16 +389,16 @@ def check_price_drop():
 
     if previous_price is not None and current_price < previous_price:
         message = (
-            f"💸 ROKA PRICE DROP: {PRICE_WATCH['name']}!\\n"
+            f"💸 ROKA PRICE DROP: {PRICE_WATCH['name']}!\n"
             f"Price decreased from ${previous_price / 100:.2f} "
-            f"to ${current_price / 100:.2f}.\\n"
+            f"to ${current_price / 100:.2f}.\n"
             f"{PRICE_WATCH['url']}?variant={PRICE_WATCH['variant_id']}"
         )
         send_discord_message(message)
         print("Price-drop Discord alert sent.")
 
     PRICE_STATE_FILE.write_text(
-        json.dumps({str(PRICE_WATCH["variant_id"]): current_price}, indent=2) + "\\n"
+        json.dumps({str(PRICE_WATCH["variant_id"]): current_price}, indent=2) + "\n"
     )
 
 
@@ -430,7 +430,7 @@ def main():
         print(f"Price monitor failed: {exc}", file=sys.stderr)
         try:
             send_discord_message(
-                f"⚠️ ROKA PRICE MONITOR FAILED\\nError: {exc}\\n"
+                f"⚠️ ROKA PRICE MONITOR FAILED\nError: {exc}\n"
                 f"URL: {PRICE_WATCH['url']}"
             )
         except Exception as alert_exc:
