@@ -7,16 +7,6 @@ from pathlib import Path
 
 import requests
 
-REI_PRODUCTS = [
-    {
-        "name": "ASICS Superblast 3 Road-Running Shoes",
-        "url": "https://www.rei.com/product/C07704/asics-superblast-3-road-running-shoes",
-        "sku": "C077040041",
-        "size": "10.5 Mens",
-        "color": "White/Black",
-    },
-]
-
 PRODUCTS = [
     {
         "name": "Maverick X-3 Wetsuit Open Box",
