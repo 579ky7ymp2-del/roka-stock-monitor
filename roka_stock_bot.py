@@ -7,6 +7,16 @@ from pathlib import Path
 
 import requests
 
+REI_PRODUCTS = [
+    {
+        "name": "ASICS Superblast 3 Road-Running Shoes",
+        "url": "https://www.rei.com/product/C07704/asics-superblast-3-road-running-shoes",
+        "sku": "C077040041",
+        "size": "10.5 Mens",
+        "color": "White/Black",
+    },
+]
+
 PRODUCTS = [
     {
         "name": "Maverick X-3 Wetsuit Open Box",
@@ -102,6 +112,98 @@ def fetch_product(url):
             time.sleep(delay)
 
     raise RuntimeError("ROKA product request failed after all retry attempts.")
+
+
+
+def fetch_rei_page(product_config):
+    """Fetch an REI product page with the requested SKU selected."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; ROKA-Stock-Monitor/1.0)"
+    }
+    response = requests.get(
+        product_config["url"],
+        params={"sku": product_config["sku"]},
+        headers=headers,
+        timeout=TIMEOUT,
+    )
+    response.raise_for_status()
+    return response.text
+
+
+def check_rei_product(product_config, previous_states):
+    """Monitor an REI SKU for online availability.
+
+    REI does not expose a public read inventory API. The SKU-specific product
+    page is used as the source of truth for shipping availability. Store
+    pickup is location-specific on REI and requires a selected store, so this
+    tracker does not guess a store.
+    """
+    html = fetch_rei_page(product_config)
+    text = html.lower()
+
+    # The SKU query selects the requested variant. Treat explicit sold-out
+    # language as unavailable; otherwise require a purchasable/add-to-cart
+    # signal before alerting.
+    sku = product_config["sku"].lower()
+    if sku not in text:
+        raise RuntimeError(f"REI SKU {product_config['sku']} was not present in the response.")
+
+    sold_out_markers = (
+        "sold out",
+        "out of stock",
+        "currently unavailable",
+    )
+    purchase_markers = (
+        "add to cart",
+        "add to bag",
+        "buy now",
+    )
+
+    available = not any(marker in text for marker in sold_out_markers) and any(
+        marker in text for marker in purchase_markers
+    )
+
+    key = "rei|" + product_config["sku"]
+    previous = previous_states.get(key)
+
+    print(
+        f"REI {product_config['name']} {product_config['color']} "
+        f"{product_config['size']}: "
+        f"{'AVAILABLE' if available else 'sold out/unavailable'} "
+        f"(previous: {previous})"
+    )
+
+    if available and previous is False:
+        send_rei_discord_alert(product_config)
+        print("Discord alert sent.")
+
+    if previous is None or previous != available:
+        record = {
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "name": product_config["name"],
+            "url": product_config["url"],
+            "sku": product_config["sku"],
+            "size": product_config["size"],
+            "color": product_config["color"],
+            "available": available,
+            "previous_available": previous,
+        }
+        with HISTORY_FILE.open("a", encoding="utf-8") as history:
+            history.write(json.dumps(record, separators=(",", ":")) + "\n")
+
+    previous_states[key] = available
+
+
+def send_rei_discord_alert(product_config):
+    message = (
+        f"🚨 REI {product_config['name']} is AVAILABLE!\n"
+        f"Size: {product_config['size']}\n"
+        f"Color: {product_config['color']}\n"
+        f"SKU: {product_config['sku']}\n"
+        f"{product_config['url']}?sku={product_config['sku']}\n"
+        f"Shipping availability detected. Check REI for pickup at your selected store."
+    )
+    send_discord_message(message)
 
 
 def _normalized(value):
@@ -421,6 +523,28 @@ def main():
             except Exception as alert_exc:
                 print(
                     f"Could not send failure alert: {alert_exc}",
+                    file=sys.stderr,
+                )
+
+    for product_config in REI_PRODUCTS:
+        try:
+            check_rei_product(product_config, previous_states)
+        except Exception as exc:
+            print(
+                f"REI monitor failed for {product_config['name']}: {exc}",
+                file=sys.stderr,
+            )
+            failures.append((product_config, exc))
+            try:
+                send_discord_message(
+                    f"⚠️ REI STOCK MONITOR FAILED\\n"
+                    f"Product: {product_config['name']} {product_config['size']} {product_config['color']}\\n"
+                    f"Error: {exc}\\n"
+                    f"URL: {product_config['url']}?sku={product_config['sku']}"
+                )
+            except Exception as alert_exc:
+                print(
+                    f"Could not send REI failure alert: {alert_exc}",
                     file=sys.stderr,
                 )
 
