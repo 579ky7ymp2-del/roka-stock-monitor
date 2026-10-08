@@ -116,16 +116,49 @@ def fetch_product(url):
 
 
 def fetch_rei_page(product_config):
-    """Fetch an REI product page with the requested SKU selected."""
+    """Fetch an REI product page with a normal browser-like session."""
+    # REI blocks generic Python HTTP clients with HTTP 403. Use a persistent
+    # session, normal Chrome headers, and a first visit to the REI homepage so
+    # the request looks more like a regular browser navigation.
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; ROKA-Stock-Monitor/1.0)"
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/154.0.0.0 Safari/537.36"
+        ),
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;"
+            "q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.rei.com/",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
     }
-    response = requests.get(
+
+    session = requests.Session()
+    session.headers.update(headers)
+
+    # Establish the normal REI session/cookies first.
+    home = session.get("https://www.rei.com/", timeout=TIMEOUT)
+    if home.status_code == 403:
+        raise RuntimeError("REI blocked the monitor with HTTP 403 on the homepage.")
+
+    response = session.get(
         product_config["url"],
         params={"sku": product_config["sku"]},
-        headers=headers,
         timeout=TIMEOUT,
     )
+
+    if response.status_code == 403:
+        raise RuntimeError(
+            "REI blocked the monitor with HTTP 403. "
+            "The product page cannot be checked from this GitHub Actions runner."
+        )
+
     response.raise_for_status()
     return response.text
 
@@ -537,9 +570,9 @@ def main():
             failures.append((product_config, exc))
             try:
                 send_discord_message(
-                    f"⚠️ REI STOCK MONITOR FAILED\\n"
-                    f"Product: {product_config['name']} {product_config['size']} {product_config['color']}\\n"
-                    f"Error: {exc}\\n"
+                    f"⚠️ REI STOCK MONITOR FAILED\n"
+                    f"Product: {product_config['name']} {product_config['size']} {product_config['color']}\n"
+                    f"Error: {exc}\n"
                     f"URL: {product_config['url']}?sku={product_config['sku']}"
                 )
             except Exception as alert_exc:
