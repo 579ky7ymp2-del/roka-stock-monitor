@@ -549,28 +549,6 @@ def main():
                     file=sys.stderr,
                 )
 
-    for product_config in REI_PRODUCTS:
-        try:
-            check_rei_product(product_config, previous_states)
-        except Exception as exc:
-            print(
-                f"REI monitor failed for {product_config['name']}: {exc}",
-                file=sys.stderr,
-            )
-            failures.append((product_config, exc))
-            try:
-                send_discord_message(
-                    f"⚠️ REI STOCK MONITOR FAILED\n"
-                    f"Product: {product_config['name']} {product_config['size']} {product_config['color']}\n"
-                    f"Error: {exc}\n"
-                    f"URL: {product_config['url']}?sku={product_config['sku']}"
-                )
-            except Exception as alert_exc:
-                print(
-                    f"Could not send REI failure alert: {alert_exc}",
-                    file=sys.stderr,
-                )
-
     try:
         check_price_drop()
     except Exception as exc:
