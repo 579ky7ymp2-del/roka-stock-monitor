@@ -36,7 +36,7 @@ PRODUCTS = [
     {
         "name": "Maverick Comp.3 Wetsuit Open Box",
         "url": "https://rokamultisport.com/products/mens-maverick-comp-3-wetsuit-open-box",
-        "variant_id": 50593984250129,
+        "variant_id": 53122830762257,
         "size": "L",
         "color": "Black/Yellow",
     },
@@ -291,7 +291,7 @@ def find_variant(product, target_variant_id, size, color=None):
         for variant in variants:
             try:
                 if int(variant.get("id")) == int(target_variant_id):
-                    if color is None or _matches_color(variant, color):
+                    if _matches_size(variant, size) and _matches_color(variant, color):
                         return variant
             except (TypeError, ValueError):
                 pass
