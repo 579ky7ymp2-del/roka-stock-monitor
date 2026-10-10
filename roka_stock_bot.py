@@ -11,7 +11,7 @@ PRODUCTS = [
     {
         "name": "Maverick X-3 Wetsuit Open Box",
         "url": "https://rokamultisport.com/products/mens-maverick-x-3-wetsuit-open-box",
-        "variant_id": 50594180366609,
+        "variant_id": 50594180399377,
         "size": "L",
     },
     {
