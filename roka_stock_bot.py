@@ -363,6 +363,8 @@ def append_history(product_config, variant, available, previous):
 
 
 def send_discord_message(message):
+    # Mention the Discord user on every monitor message so notifications are surfaced.
+    message = f"<@alpal5307> {message}"
     webhook = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook:
         raise RuntimeError(
