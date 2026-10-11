@@ -530,6 +530,11 @@ def check_price_drop():
 
 
 def main():
+    if os.environ.get("SEND_TEST_MESSAGE", "").strip().lower() in {"1", "true", "yes", "on"}:
+        send_discord_message("🧪 Test notification from the ROKA stock tracker. If you received this as a Discord notification, the mention is working.")
+        print("Test Discord message sent.")
+        return
+
     previous_states = load_previous_states()
     failures = []
 
