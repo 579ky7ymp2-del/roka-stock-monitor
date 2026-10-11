@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      send_test_message:
+        description: "Send a one-time Discord notification test instead of checking stock"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: roka-stock-monitor
@@ -27,6 +33,7 @@ jobs:
       - name: Check ROKA size L
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SEND_TEST_MESSAGE: ${{ inputs.send_test_message }}
         run: python roka_stock_bot.py
       - name: Save stock state
         if: always()
