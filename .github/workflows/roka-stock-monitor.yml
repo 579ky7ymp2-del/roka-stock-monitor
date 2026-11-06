@@ -1,6 +1,8 @@
 name: ROKA Stock Monitor
 
 on:
+  schedule:
+    - cron: "8,23,38,53 * * * *"
   workflow_dispatch:
     inputs:
       send_test_message:
