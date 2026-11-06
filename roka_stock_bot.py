@@ -29,14 +29,14 @@ PRODUCTS = [
     {
         "name": "Maverick Comp.3 Wetsuit Open Box",
         "url": "https://rokamultisport.com/products/mens-maverick-comp-3-wetsuit-open-box",
-        "variant_id": 50593984250129,
+        "variant_id": 50593984151825,
         "size": "M",
         "color": "Cyclone",
     },
     {
         "name": "Maverick Comp.3 Wetsuit Open Box",
         "url": "https://rokamultisport.com/products/mens-maverick-comp-3-wetsuit-open-box",
-        "variant_id": 53122830762257,
+        "variant_id": 53122830663953,
         "size": "M",
         "color": "Black/Yellow",
     },
